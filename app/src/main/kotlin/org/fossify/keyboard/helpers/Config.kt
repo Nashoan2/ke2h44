@@ -59,8 +59,8 @@ class Config(context: Context) : BaseConfig(context) {
         set(keyboardTheme) = prefs.edit().putInt(KEYBOARD_THEME, keyboardTheme).apply()
 
     var keyboardHeightPercentage: Int
-        get() = prefs.getInt(HEIGHT_PERCENTAGE, KEYBOARD_HEIGHT_100_PERCENT)
-        set(keyboardHeightMultiplier) = prefs.edit().putInt(HEIGHT_PERCENTAGE, keyboardHeightMultiplier).apply()
+        get() = prefs.getInt(HEIGHT_PERCENTAGE, KEYBOARD_HEIGHT_100_PERCENT).coerceIn(100, 180)
+        set(keyboardHeightMultiplier) = prefs.edit().putInt(HEIGHT_PERCENTAGE, keyboardHeightMultiplier.coerceIn(100, 180)).apply()
 
     var showClipboardContent: Boolean
         get() = prefs.getBoolean(SHOW_CLIPBOARD_CONTENT, true)

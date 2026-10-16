@@ -119,37 +119,19 @@ class ClipsKeyboardAdapter(
                 togglePinClip(clip)
             }
 
-            if (clip.isPinned) {
-                // Drag and drop reordering strictly for pinned clips (no toast / message)
-                root.setOnLongClickListener {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    onStartDrag?.invoke(holder)
-                    true
-                }
+            root.setOnLongClickListener {
+                showClipOptionsPopup(clip, it)
+                true
+            }
 
-                clipValue.setOnLongClickListener {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    onStartDrag?.invoke(holder)
-                    true
-                }
+            clipValue.setOnLongClickListener {
+                showClipOptionsPopup(clip, it)
+                true
+            }
 
-                // Long press on pin indicator shows the popup options (Unpin/Delete/Cancel)
-                clipPinIndicator.setOnLongClickListener {
-                    showClipOptionsPopup(clip, it)
-                    true
-                }
-            } else {
-                root.setOnLongClickListener {
-                    showClipOptionsPopup(clip, it)
-                    true
-                }
-
-                clipValue.setOnLongClickListener {
-                    showClipOptionsPopup(clip, it)
-                    true
-                }
-
-                clipPinIndicator.setOnLongClickListener(null)
+            clipPinIndicator.setOnLongClickListener {
+                showClipOptionsPopup(clip, it)
+                true
             }
         }
     }
@@ -180,11 +162,6 @@ class ClipsKeyboardAdapter(
     }
 
     private fun deleteClip(clip: Clip) {
-        if (clip.isPinned) {
-            // CRITICAL: Pinned clips MUST NOT be deleted unless unpinned first!
-            context.toast(R.string.cannot_delete_pinned)
-            return
-        }
         ClipsHelper.clearSystemClipboardIfMatches(context, clip.value)
         ensureBackgroundThread {
             if (clip.id != null && clip.id != -1L) {

@@ -512,7 +512,7 @@ class MyKeyboard {
     }
 
     fun setHeightMultiplier(multiplier: Float) {
-        val clampedMultiplier = multiplier.coerceIn(0.70f, 1.60f)
+        val clampedMultiplier = multiplier.coerceIn(1.00f, 1.80f)
         if (clampedMultiplier == mKeyboardHeightMultiplier || clampedMultiplier <= 0f) return
         val ratio = clampedMultiplier / mKeyboardHeightMultiplier
         mKeyboardHeightMultiplier = clampedMultiplier

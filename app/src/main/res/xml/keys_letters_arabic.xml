@@ -81,41 +81,41 @@
         <Key
             app:keyEdgeFlags="left"
             app:keyLabel="ى"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="ي"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
             app:keyLabel="ظ"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="؟؛،"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
             app:keyLabel="ط"
-            app:keyWidth="9.4777%p" />
+            app:keyWidth="9.8%p" />
         <Key
             app:keyLabel="ذ"
-            app:keyWidth="9.4777%p" />
+            app:keyWidth="9.8%p" />
         <Key
             app:keyLabel="د"
-            app:keyWidth="9.4777%p" />
+            app:keyWidth="9.8%p" />
         <Key
             app:keyLabel="ز"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="رژ"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
             app:keyLabel="ر"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="زژ"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
             app:keyLabel="و"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="ؤۆ"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
             app:keyLabel="أ"
-            app:keyWidth="9.4777%p"
+            app:keyWidth="9.8%p"
             app:popupCharacters="إآٱء"
             app:popupKeyboard="@xml/keyboard_popup_template" />
         <Key
@@ -123,7 +123,7 @@
             app:isRepeatable="true"
             app:keyEdgeFlags="right"
             app:keyIcon="@drawable/ic_backspace_cyan"
-            app:keyWidth="14.7007%p" />
+            app:keyWidth="11.8%p" />
     </Row>
     <Row>
         <Key

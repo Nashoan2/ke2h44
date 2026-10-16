@@ -4,6 +4,7 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.content.ClipData
+import org.fossify.keyboard.dialogs.KeyboardResizeDialog
 import org.fossify.keyboard.services.SimpleKeyboardIME
 import android.content.ClipboardManager
 import android.content.Context
@@ -468,6 +469,14 @@ class MyKeyboardView @JvmOverloads constructor(
                 (context as? android.inputmethodservice.InputMethodService)?.requestHideSelf(0)
             }
 
+            toolbarSettingsShortcut.setOnClickListener {
+                vibrateIfNeeded()
+                Intent(context, SettingsActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(this)
+                }
+            }
+
             // Tools Menu actions (Image 90)
             toolsMenuClose.setOnClickListener {
                 vibrateIfNeeded()
@@ -779,6 +788,7 @@ class MyKeyboardView @JvmOverloads constructor(
             }
             toolbarCursor.applyColorFilter(toolbarIconColor)
             pinnedClipboardItems.applyColorFilter(toolbarIconColor)
+            toolbarSettingsShortcut.applyColorFilter(toolbarIconColor)
             toolbarCollapse.clearColorFilter()
 
             mToolbarHolder?.beVisible()
@@ -1404,9 +1414,33 @@ class MyKeyboardView @JvmOverloads constructor(
     }
 
     private fun getPressedKeyIndex(x: Int, y: Int): Int {
-        return mKeys.indexOfFirst {
+        val exactIndex = mKeys.indexOfFirst {
             it.isInside(x, y)
         }
+        if (exactIndex != NOT_A_KEY) {
+            return exactIndex
+        }
+
+        // Proximity fallback: find closest key center within reasonable touch distance
+        var closestIndex = NOT_A_KEY
+        var minDistanceSq = Int.MAX_VALUE
+        val maxAllowedDist = (36 * resources.displayMetrics.density).toInt()
+        val maxAllowedDistSq = maxAllowedDist * maxAllowedDist
+
+        for (i in mKeys.indices) {
+            val key = mKeys[i]
+            val centerX = key.x + key.width / 2
+            val centerY = key.y + key.height / 2
+            val dx = x - centerX
+            val dy = y - centerY
+            val distSq = dx * dx + dy * dy
+            if (distSq < minDistanceSq) {
+                minDistanceSq = distSq
+                closestIndex = i
+            }
+        }
+
+        return if (minDistanceSq <= maxAllowedDistSq) closestIndex else NOT_A_KEY
     }
 
     private fun detectAndSendKey(index: Int, x: Int, y: Int, eventTime: Long) {
@@ -1805,23 +1839,24 @@ class MyKeyboardView @JvmOverloads constructor(
 
         when (action) {
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // if the user presses a key while still holding down the previous, type in both chars and ignore the later gestures
-                // can happen at fast typing, easier to reproduce by increasing LONGPRESS_TIMEOUT
-                ignoreTouches = true
                 mHandler!!.removeMessages(MSG_LONGPRESS)
                 dismissPopupKeyboard()
-                detectAndSendKey(keyIndex, me.x.toInt(), me.y.toInt(), eventTime)
+                if (keyIndex != NOT_A_KEY) {
+                    detectAndSendKey(keyIndex, me.x.toInt(), me.y.toInt(), eventTime)
+                }
 
-                val newPointerX = me.getX(1).toInt()
-                val newPointerY = me.getY(1).toInt()
+                val pointerIdx = me.actionIndex
+                val newPointerX = me.getX(pointerIdx).toInt()
+                val newPointerY = me.getY(pointerIdx).toInt()
                 val secondKeyIndex = getPressedKeyIndex(newPointerX, newPointerY)
-                showPreview(secondKeyIndex)
 
-                detectAndSendKey(secondKeyIndex, newPointerX, newPointerY, eventTime)
-
-                val secondKeyCode = mKeys.getOrNull(secondKeyIndex)?.code
-                if (secondKeyCode != null) {
-                    mOnKeyboardActionListener!!.onPress(secondKeyCode)
+                if (secondKeyIndex != NOT_A_KEY) {
+                    showPreview(secondKeyIndex)
+                    detectAndSendKey(secondKeyIndex, newPointerX, newPointerY, eventTime)
+                    val secondKeyCode = mKeys.getOrNull(secondKeyIndex)?.code
+                    if (secondKeyCode != null) {
+                        mOnKeyboardActionListener!!.onPress(secondKeyCode)
+                    }
                 }
 
                 showPreview(NOT_A_KEY)
@@ -1958,11 +1993,6 @@ class MyKeyboardView @JvmOverloads constructor(
                     mCurrentKeyTime = 0
                 }
 
-                if (mCurrentKeyTime < mLastKeyTime && mCurrentKeyTime < DEBOUNCE_TIME && mLastKey != NOT_A_KEY) {
-                    mCurrentKey = mLastKey
-                    touchX = mLastCodeX
-                    touchY = mLastCodeY
-                }
                 showPreview(NOT_A_KEY)
                 Arrays.fill(mKeyIndices, NOT_A_KEY)
 
@@ -2072,8 +2102,7 @@ class MyKeyboardView @JvmOverloads constructor(
                 emojiPaletteHolder.visibility == View.VISIBLE ||
                 toolsMenuHolder.visibility == View.VISIBLE ||
                 textEditorHolder.visibility == View.VISIBLE ||
-                numericKeypadHolder.visibility == View.VISIBLE ||
-                keyboardResizeOverlay.visibility == View.VISIBLE
+                numericKeypadHolder.visibility == View.VISIBLE
         } ?: false
     }
 
@@ -2085,7 +2114,6 @@ class MyKeyboardView @JvmOverloads constructor(
             toolsMenuHolder.beGone()
             textEditorHolder.beGone()
             numericKeypadHolder.beGone()
-            keyboardResizeOverlay.beGone()
             suggestionsHolder.showAllInlineContentViews()
             mToolbarHolder?.beVisible()
         }
@@ -2093,70 +2121,17 @@ class MyKeyboardView @JvmOverloads constructor(
 
     fun openResizeMode() {
         closeAllPanels()
-        keyboardViewBinding?.apply {
-            keyboardResizeOverlay.beVisible()
-            suggestionsHolder.hideAllInlineContentViews()
+        KeyboardResizeDialog(this) {
+            mOnKeyboardActionListener?.reloadKeyboard()
         }
     }
 
     fun closeResizeOverlay() {
-        keyboardViewBinding?.keyboardResizeOverlay?.beGone()
+        // Obsolete overlay removed
     }
 
     private fun setupResizeOverlay() {
-        keyboardViewBinding?.apply {
-            var startY = 0f
-            var initialMultiplier = 1.0f
-
-            val resizeTouchListener = View.OnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        startY = event.rawY
-                        initialMultiplier = mKeyboard?.mKeyboardHeightMultiplier
-                            ?: (context.config.keyboardHeightPercentage / 100.0f)
-                        vibrateIfNeeded()
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val deltaY = event.rawY - startY
-                        val totalHeight = (mKeyboard?.mHeight ?: 200).toFloat()
-                        if (totalHeight > 0f) {
-                            val deltaRatio = -deltaY / totalHeight
-                            val targetMultiplier = (initialMultiplier + deltaRatio).coerceIn(0.70f, 1.60f)
-                            mKeyboard?.setHeightMultiplier(targetMultiplier)
-                            requestLayout()
-                            invalidateAllKeys()
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        vibrateIfNeeded()
-                        true
-                    }
-                    else -> false
-                }
-            }
-
-            resizeTopHandleArea.setOnTouchListener(resizeTouchListener)
-            btnResizeMove.setOnTouchListener(resizeTouchListener)
-
-            btnResizeReset.setOnClickListener {
-                vibrateIfNeeded()
-                mKeyboard?.setHeightMultiplier(1.0f)
-                context.config.keyboardHeightPercentage = 100
-                requestLayout()
-                invalidateAllKeys()
-            }
-
-            btnResizeDone.setOnClickListener {
-                vibrateIfNeeded()
-                val currentMult = mKeyboard?.mKeyboardHeightMultiplier ?: 1.0f
-                val finalPercentage = (currentMult * 100.0f).roundToInt().coerceIn(70, 160)
-                context.config.keyboardHeightPercentage = finalPercentage
-                closeResizeOverlay()
-                mOnKeyboardActionListener?.reloadKeyboard()
-            }
-        }
+        // Obsolete overlay removed
     }
 
     fun ensureToolbarVisible() {

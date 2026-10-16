@@ -132,6 +132,23 @@
                 android:background="#4D00D2FF" />
 
             <ImageView
+                android:id="@+id/toolbar_settings_shortcut"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:padding="4dp"
+                android:scaleType="centerInside"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings"
+                android:src="@drawable/ic_toolbar_settings" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center_vertical"
+                android:background="#4D00D2FF" />
+
+            <ImageView
                 android:id="@+id/toolbar_collapse"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -219,134 +236,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Keyboard Resize Mode Overlay (Exact Replica of User Screenshot) -->
-    <FrameLayout
-        android:id="@+id/keyboard_resize_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:clickable="true"
-        android:focusable="true"
-        android:visibility="gone"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="2dp"
-        android:background="@drawable/bg_keyboard_resize_frame"
-        app:layout_constraintBottom_toBottomOf="@+id/keyboard_view"
-        app:layout_constraintEnd_toEndOf="@+id/keyboard_view"
-        app:layout_constraintStart_toStartOf="@+id/keyboard_view"
-        app:layout_constraintTop_toTopOf="@+id/keyboard_view">
 
-        <!-- Top Drag Handle Area -->
-        <FrameLayout
-            android:id="@+id/resize_top_handle_area"
-            android:layout_width="140dp"
-            android:layout_height="48dp"
-            android:layout_gravity="top|center_horizontal"
-            android:clickable="true"
-            android:focusable="true"
-            android:contentDescription="@string/keyboard_height">
-
-            <View
-                android:id="@+id/resize_top_handle_bar"
-                android:layout_width="48dp"
-                android:layout_height="5dp"
-                android:layout_gravity="center"
-                android:background="@drawable/bg_resize_handle" />
-        </FrameLayout>
-
-        <!-- Center Floating Control Buttons (Done, 4-way move, Reset) -->
-        <LinearLayout
-            android:id="@+id/resize_controls_container"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:layoutDirection="rtl">
-
-            <!-- Reset Button: "إعادة ضبط ↺" -->
-            <LinearLayout
-                android:id="@+id/btn_resize_reset"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_resize_pill"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp">
-
-                <TextView
-                    android:id="@+id/text_resize_reset"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/resize_reset"
-                    android:textColor="#FFFFFF"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginStart="8dp"
-                    android:src="@drawable/ic_reset_white"
-                    android:contentDescription="@string/resize_reset" />
-            </LinearLayout>
-
-            <!-- Center 4-way Move Button -->
-            <FrameLayout
-                android:id="@+id/btn_resize_move"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="14dp"
-                android:layout_marginEnd="14dp"
-                android:background="@drawable/bg_resize_circle"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="@string/tool_resize">
-
-                <ImageView
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_move_arrows_white"
-                    android:contentDescription="@string/tool_resize" />
-            </FrameLayout>
-
-            <!-- Done Button: "تم ✓" -->
-            <LinearLayout
-                android:id="@+id/btn_resize_done"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_resize_pill"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingStart="22dp"
-                android:paddingEnd="22dp">
-
-                <TextView
-                    android:id="@+id/text_resize_done"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/resize_done"
-                    android:textColor="#FFFFFF"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginStart="8dp"
-                    android:src="@drawable/ic_check_white"
-                    android:contentDescription="@string/resize_done" />
-            </LinearLayout>
-
-        </LinearLayout>
-
-    </FrameLayout>
 
     <RelativeLayout
         android:id="@+id/emoji_palette_holder"
