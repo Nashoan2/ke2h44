@@ -1,0 +1,16 @@
+[smileys_emotion]
+😂;Face with tears of joy;
+⬆️;Up arrow;
+👇;Down pointing finger;
+☑️;Ballot box with check;
+🫡;Saluting face;
+👋;Waving hand;
+👆;Up pointing finger;
+🤍;White heart;
+😔;Pensive face;
+🤩;Star-struck;
+🤲;Palms up together;
+🙏;Folded hands;
+❤️;Red heart;
+🌹;Rose;
+👍;Thumbs up;

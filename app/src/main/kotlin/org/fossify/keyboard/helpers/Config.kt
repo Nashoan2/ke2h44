@@ -1,0 +1,112 @@
+package org.fossify.keyboard.helpers
+
+import android.content.Context
+import org.fossify.commons.helpers.BaseConfig
+import org.fossify.keyboard.extensions.isDeviceLocked
+import org.fossify.keyboard.extensions.safeStorageContext
+import java.util.Locale
+
+class Config(context: Context) : BaseConfig(context) {
+    companion object {
+        fun newInstance(context: Context) = Config(context.safeStorageContext)
+    }
+
+    var vibrateOnKeypress: Boolean
+        get() = false
+        set(vibrateOnKeypress) = prefs.edit().putBoolean(VIBRATE_ON_KEYPRESS, false).apply()
+
+    var soundOnKeypress: Int
+        get() = SOUND_NONE
+        set(soundOnKeypress) = prefs.edit().putInt(SOUND_ON_KEYPRESS, SOUND_NONE).apply()
+
+    var isClipboardInitialized: Boolean
+        get() = prefs.getBoolean("is_clipboard_initialized_clean", false)
+        set(value) = prefs.edit().putBoolean("is_clipboard_initialized_clean", value).apply()
+
+    var showPopupOnKeypress: Boolean
+        get() = prefs.getBoolean(SHOW_POPUP_ON_KEYPRESS, true)
+        set(showPopupOnKeypress) = prefs.edit().putBoolean(SHOW_POPUP_ON_KEYPRESS, showPopupOnKeypress).apply()
+
+    var enableSentencesCapitalization: Boolean
+        get() = prefs.getBoolean(SENTENCES_CAPITALIZATION, true)
+        set(enableCapitalization) = prefs.edit().putBoolean(SENTENCES_CAPITALIZATION, enableCapitalization).apply()
+
+    var showEmojiKey: Boolean
+        get() = prefs.getBoolean(SHOW_EMOJI_KEY, true)
+        set(showEmojiKey) = prefs.edit().putBoolean(SHOW_EMOJI_KEY, showEmojiKey).apply()
+
+    var showLanguageSwitchKey: Boolean
+        get() = prefs.getBoolean(SHOW_LANGUAGE_SWITCH_KEY, false)
+        set(showLanguageSwitchKey) = prefs.edit().putBoolean(SHOW_LANGUAGE_SWITCH_KEY, showLanguageSwitchKey).apply()
+
+    var showKeyBorders: Boolean
+        get() = prefs.getBoolean(SHOW_KEY_BORDERS, true)
+        set(showKeyBorders) = prefs.edit().putBoolean(SHOW_KEY_BORDERS, showKeyBorders).apply()
+
+    var lastExportedClipsFolder: String
+        get() = prefs.getString(LAST_EXPORTED_CLIPS_FOLDER, "")!!
+        set(lastExportedClipsFolder) = prefs.edit().putString(LAST_EXPORTED_CLIPS_FOLDER, lastExportedClipsFolder).apply()
+
+    var keyboardLanguage: Int
+        get() {
+            val lang = prefs.getInt(KEYBOARD_LANGUAGE, LANGUAGE_ARABIC)
+            return if (lang in SUPPORTED_LANGUAGES) lang else LANGUAGE_ARABIC
+        }
+        set(keyboardLanguage) = prefs.edit().putInt(KEYBOARD_LANGUAGE, keyboardLanguage).apply()
+
+    var keyboardTheme: Int
+        get() = prefs.getInt(KEYBOARD_THEME, THEME_NEON_CYBER)
+        set(keyboardTheme) = prefs.edit().putInt(KEYBOARD_THEME, keyboardTheme).apply()
+
+    var keyboardHeightPercentage: Int
+        get() = prefs.getInt(HEIGHT_PERCENTAGE, KEYBOARD_HEIGHT_100_PERCENT)
+        set(keyboardHeightMultiplier) = prefs.edit().putInt(HEIGHT_PERCENTAGE, keyboardHeightMultiplier).apply()
+
+    var showClipboardContent: Boolean
+        get() = prefs.getBoolean(SHOW_CLIPBOARD_CONTENT, true)
+        set(showClipboardContent) = prefs.edit().putBoolean(SHOW_CLIPBOARD_CONTENT, showClipboardContent).apply()
+
+    var showNumbersRow: Boolean
+        get() = if (context.isDeviceLocked) {
+            true
+        } else {
+            prefs.getBoolean(SHOW_NUMBERS_ROW, false)
+        }
+        set(showNumbersRow) = prefs.edit().putBoolean(SHOW_NUMBERS_ROW, showNumbersRow).apply()
+
+    var voiceInputMethod: String
+        get() = prefs.getString(VOICE_INPUT_METHOD, "")!!
+        set(voiceInputMethod) = prefs.edit().putString(VOICE_INPUT_METHOD, voiceInputMethod).apply()
+
+    var selectedLanguages: MutableSet<Int>
+        get() {
+            val stringSet = prefs.getStringSet(SELECTED_LANGUAGES, null)
+            val filtered = stringSet?.mapNotNull { it.toIntOrNull() }?.filter { it in SUPPORTED_LANGUAGES }?.toMutableSet()
+            if (filtered.isNullOrEmpty()) {
+                return mutableSetOf(LANGUAGE_ARABIC, LANGUAGE_ENGLISH_QWERTY)
+            }
+            return filtered
+        }
+        set(selectedLanguages) {
+            val filtered = selectedLanguages.filter { it in SUPPORTED_LANGUAGES }.toSet()
+            val stringSet = filtered.map { it.toString() }.toSet()
+            prefs.edit().putStringSet(SELECTED_LANGUAGES, stringSet).apply()
+        }
+
+    fun getDefaultLanguage(): Int {
+        return LANGUAGE_ARABIC
+    }
+
+    var recentlyUsedEmojis: List<String>
+        get() = prefs.getString(RECENTLY_USED_EMOJIS, "\uD83D\uDC30")!!.split("|").filter { it.isNotEmpty() }
+        set(recentlyUsedEmojis) = prefs.edit().putString(
+            RECENTLY_USED_EMOJIS, recentlyUsedEmojis.joinToString("|")
+        ).apply()
+
+    fun addRecentEmoji(emoji: String) {
+        val recentEmojis = recentlyUsedEmojis.toMutableList()
+        recentEmojis.remove(emoji)
+        recentEmojis.add(0, emoji)
+        recentlyUsedEmojis = recentEmojis.take(RECENT_EMOJIS_LIMIT)
+    }
+}

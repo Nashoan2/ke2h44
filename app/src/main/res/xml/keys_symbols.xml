@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Keyboard xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Row>
+        <Key
+            app:keyEdgeFlags="left"
+            app:keyLabel="1"
+            app:popupCharacters="١¹½"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="2"
+            app:popupCharacters="٢²⅓"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="3"
+            app:popupCharacters="٣³¼"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="4"
+            app:popupCharacters="٤⁴"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="5"
+            app:popupCharacters="٥⁵"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="6"
+            app:popupCharacters="٦⁶"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="7"
+            app:popupCharacters="٧⁷"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="8"
+            app:popupCharacters="٨⁸"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="9"
+            app:popupCharacters="٩⁹"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyEdgeFlags="right"
+            app:keyLabel="0"
+            app:popupCharacters="٠⁰ⁿ"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+    </Row>
+    <Row>
+        <Key
+            app:keyEdgeFlags="left"
+            app:keyLabel="\@" />
+        <Key app:keyLabel="\#" />
+        <Key
+            app:keyLabel="$"
+            app:popupCharacters="€£¥¢₽₹"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="%"
+            app:popupCharacters="‰٪"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key app:keyLabel="&amp;" />
+        <Key
+            app:keyLabel="-"
+            app:popupCharacters="—–·"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="+"
+            app:popupCharacters="±"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="("
+            app:popupCharacters="[{&lt;"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel=")"
+            app:popupCharacters="]}&gt;"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyEdgeFlags="right"
+            app:keyLabel="/"
+            app:popupCharacters="\\"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+    </Row>
+    <Row>
+        <Key
+            app:code="-1"
+            app:keyEdgeFlags="left"
+            app:keyLabel="=\\&lt;"
+            app:keyWidth="14%p" />
+        <Key
+            app:keyLabel="*"
+            app:keyWidth="10.2857%p" />
+        <Key
+            app:keyLabel="&quot;"
+            app:keyWidth="10.2857%p"
+            app:popupCharacters="“”„«»"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="\'"
+            app:keyWidth="10.2857%p"
+            app:popupCharacters="‘’‹›"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel=":"
+            app:keyWidth="10.2857%p" />
+        <Key
+            app:keyLabel=";"
+            app:keyWidth="10.2857%p" />
+        <Key
+            app:keyLabel="!"
+            app:keyWidth="10.2857%p"
+            app:popupCharacters="¡"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:keyLabel="؟"
+            app:keyWidth="10.2857%p"
+            app:popupCharacters="\?¿"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:code="-5"
+            app:isRepeatable="true"
+            app:keyEdgeFlags="right"
+            app:keyIcon="@drawable/ic_backspace_cyan"
+            app:keyWidth="14%p" />
+    </Row>
+    <Row>
+        <Key
+            app:code="-2"
+            app:keyEdgeFlags="left"
+            app:keyLabel="أ ب ج"
+            app:keyWidth="14%p" />
+        <Key
+            app:keyLabel="،"
+            app:keyWidth="10%p"
+            app:popupCharacters=",؛"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:code="32"
+            app:isRepeatable="true"
+            app:keyWidth="52%p" />
+        <Key
+            app:keyLabel="."
+            app:keyWidth="10%p"
+            app:popupCharacters="…،؟!;:"
+            app:popupKeyboard="@xml/keyboard_popup_template" />
+        <Key
+            app:code="-4"
+            app:keyEdgeFlags="right"
+            app:keyIcon="@drawable/ic_enter_cyan"
+            app:keyWidth="14%p" />
+    </Row>
+</Keyboard>

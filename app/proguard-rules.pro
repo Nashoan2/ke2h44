@@ -1,0 +1,10 @@
+-keep class org.fossify.keyboard.helpers.MyKeyboard$Key { *; }
+-keep class org.fossify.keyboard.views.** { *; }
+-keep class org.fossify.keyboard.models.** { *; }
+-keep class org.fossify.keyboard.adapters.** { *; }
+-keep class org.fossify.keyboard.databinding.** { *; }
+-keep class org.fossify.keyboard.activities.ManageClipboardItemsActivity$BackupItem { *; }
+-keep class org.fossify.commons.views.** { *; }
+-keep class org.fossify.commons.dialogs.** { *; }
+-keep class org.fossify.commons.models.** { *; }
+-dontwarn **

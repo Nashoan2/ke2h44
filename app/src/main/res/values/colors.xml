@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="key_press_color">#142646</color>
+    <color name="keyboard_dark_background">#081022</color>
+    <color name="key_card_color">#071026</color>
+    <color name="key_card_pressed_color">#142646</color>
+    <color name="neon_cyan">#00D2FF</color>
+    <color name="neon_cyan_bright">#00E5FF</color>
+    <color name="accent_cyan">#00E5FF</color>
+    <color name="theme_dark_background_color">#081022</color>
+</resources>

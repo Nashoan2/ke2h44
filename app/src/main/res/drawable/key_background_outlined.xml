@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 3D Bottom Extrusion Shadow -->
+    <item
+        android:bottom="0dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:top="4dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#070E1A" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <!-- 3D Raised Face -->
+    <item
+        android:bottom="4dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:top="0dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#223B5E"
+                android:endColor="#14253D" />
+            <stroke
+                android:width="1.3dp"
+                android:color="#4477A8" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</layer-list>

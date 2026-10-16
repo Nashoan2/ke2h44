@@ -1,0 +1,311 @@
+package org.fossify.keyboard.activities
+
+import android.content.Intent
+import android.os.Bundle
+import org.fossify.commons.dialogs.RadioGroupDialog
+import org.fossify.commons.extensions.beVisibleIf
+import org.fossify.commons.extensions.getProperPrimaryColor
+import org.fossify.commons.extensions.toast
+import org.fossify.commons.extensions.updateTextColors
+import org.fossify.commons.extensions.viewBinding
+import org.fossify.commons.helpers.NavigationIcon
+import org.fossify.commons.helpers.isTiramisuPlus
+import org.fossify.commons.models.RadioItem
+import org.fossify.keyboard.R
+import org.fossify.keyboard.databinding.ActivitySettingsBinding
+import org.fossify.keyboard.dialogs.ManageKeyboardLanguagesDialog
+import org.fossify.keyboard.extensions.config
+import org.fossify.keyboard.extensions.getCurrentVoiceInputMethod
+import org.fossify.keyboard.extensions.getKeyboardLanguageText
+import org.fossify.keyboard.extensions.getKeyboardLanguagesRadioItems
+import org.fossify.keyboard.extensions.getKeyboardThemeName
+import org.fossify.keyboard.extensions.getKeyboardThemesRadioItems
+import org.fossify.keyboard.extensions.getVoiceInputMethods
+import org.fossify.keyboard.extensions.getVoiceInputRadioItems
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_100_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_120_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_140_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_160_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_70_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_80_PERCENT
+import org.fossify.keyboard.helpers.KEYBOARD_HEIGHT_90_PERCENT
+import org.fossify.keyboard.helpers.SOUND_ALWAYS
+import org.fossify.keyboard.helpers.SOUND_NONE
+import org.fossify.keyboard.helpers.SOUND_SYSTEM
+import java.util.Locale
+import kotlin.system.exitProcess
+
+class SettingsActivity : SimpleActivity() {
+    private val binding by viewBinding(ActivitySettingsBinding::inflate)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(binding.root)
+
+        binding.apply {
+            setupEdgeToEdge(padBottomSystem = listOf(settingsNestedScrollview))
+            setupMaterialScrollListener(binding.settingsNestedScrollview, binding.settingsAppbar)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        setupTopAppBar(binding.settingsAppbar, NavigationIcon.Arrow)
+
+        setupUseEnglish()
+        setupLanguage()
+        setupManageClipboardItems()
+        setupVibrateOnKeypress()
+        setupSoundOnKeypress()
+        setupShowPopupOnKeypress()
+        setupShowKeyBorders()
+        setupManageKeyboardLanguages()
+        setupKeyboardLanguage()
+        setupKeyboardTheme()
+        setupKeyboardHeightMultiplier()
+        setupShowEmojiKey()
+        setupShowLanguageSwitchKey()
+        setupShowClipboardContent()
+        setupSentencesCapitalization()
+        setupShowNumbersRow()
+        setupVoiceInputMethod()
+        setupBackupClips()
+        setupRestoreClips()
+
+        binding.apply {
+            updateTextColors(settingsNestedScrollview)
+
+            arrayOf(
+                settingsGeneralSettingsLabel,
+                settingsLayoutAppearanceLabel,
+                settingsKeypressLabel,
+                settingsTypingInputLabel,
+                settingsClipboardSettingsLabel,
+                settingsBackupRestoreLabel
+            ).forEach {
+                it.setTextColor(getProperPrimaryColor())
+            }
+        }
+    }
+
+    private fun setupUseEnglish() {
+        binding.apply {
+            settingsUseEnglishHolder.beVisibleIf((config.wasUseEnglishToggled || Locale.getDefault().language != "en") && !isTiramisuPlus())
+            settingsUseEnglish.isChecked = config.useEnglish
+            settingsUseEnglishHolder.setOnClickListener {
+                settingsUseEnglish.toggle()
+                config.useEnglish = settingsUseEnglish.isChecked
+                exitProcess(0)
+            }
+        }
+    }
+
+    private fun setupLanguage() {
+        binding.apply {
+            settingsLanguage.text = Locale.getDefault().displayLanguage
+            settingsLanguageHolder.beVisibleIf(isTiramisuPlus())
+            settingsLanguageHolder.setOnClickListener {
+                launchChangeAppLanguageIntent()
+            }
+        }
+    }
+
+    private fun setupManageClipboardItems() {
+        binding.settingsManageClipboardItemsHolder.setOnClickListener {
+            Intent(this, ManageClipboardItemsActivity::class.java).apply {
+                startActivity(this)
+            }
+        }
+    }
+
+    private fun setupVibrateOnKeypress() {
+        binding.settingsVibrateOnKeypressHolder.visibility = android.view.View.GONE
+    }
+
+    private fun setupSoundOnKeypress() {
+        binding.settingsSoundOnKeypressHolder.visibility = android.view.View.GONE
+    }
+
+    @Suppress("unused")
+    private fun getSoundOnKeypressText(mode: Int): String = getString(
+        when (mode) {
+            SOUND_SYSTEM -> R.string.sound_system
+            SOUND_ALWAYS -> R.string.sound_always
+            else -> R.string.sound_none
+        }
+    )
+
+    private fun setupShowPopupOnKeypress() {
+        binding.apply {
+            settingsShowPopupOnKeypress.isChecked = config.showPopupOnKeypress
+            settingsShowPopupOnKeypressHolder.setOnClickListener {
+                settingsShowPopupOnKeypress.toggle()
+                config.showPopupOnKeypress = settingsShowPopupOnKeypress.isChecked
+            }
+        }
+    }
+
+    private fun setupShowKeyBorders() {
+        binding.apply {
+            settingsShowKeyBorders.isChecked = config.showKeyBorders
+            settingsShowKeyBordersHolder.setOnClickListener {
+                settingsShowKeyBorders.toggle()
+                config.showKeyBorders = settingsShowKeyBorders.isChecked
+            }
+        }
+    }
+
+    private fun setupManageKeyboardLanguages() {
+        binding.apply {
+            settingsManageKeyboardLanguagesHolder.setOnClickListener {
+                ManageKeyboardLanguagesDialog(this@SettingsActivity) {
+                    settingsKeyboardLanguage.text = getKeyboardLanguageText(config.keyboardLanguage)
+                }
+            }
+        }
+    }
+
+    private fun setupKeyboardLanguage() {
+        binding.apply {
+            settingsKeyboardLanguage.text = getKeyboardLanguageText(config.keyboardLanguage)
+            settingsKeyboardLanguageHolder.setOnClickListener {
+                val items = getKeyboardLanguagesRadioItems()
+                RadioGroupDialog(this@SettingsActivity, items, config.keyboardLanguage) {
+                    config.keyboardLanguage = it as Int
+                    settingsKeyboardLanguage.text = getKeyboardLanguageText(config.keyboardLanguage)
+                }
+            }
+        }
+    }
+
+    private fun setupKeyboardTheme() {
+        binding.apply {
+            settingsKeyboardTheme.text = getKeyboardThemeName(config.keyboardTheme)
+            settingsKeyboardThemeHolder.setOnClickListener {
+                val items = getKeyboardThemesRadioItems()
+                RadioGroupDialog(this@SettingsActivity, items, config.keyboardTheme) {
+                    config.keyboardTheme = it as Int
+                    settingsKeyboardTheme.text = getKeyboardThemeName(config.keyboardTheme)
+                }
+            }
+        }
+    }
+
+    private fun setupKeyboardHeightMultiplier() {
+        binding.apply {
+            settingsKeyboardHeightMultiplier.text =
+                getKeyboardHeightPercentageText(config.keyboardHeightPercentage)
+            settingsKeyboardHeightMultiplierHolder.setOnClickListener {
+                org.fossify.keyboard.dialogs.KeyboardResizeDialog(this@SettingsActivity) { newPercentage ->
+                    settingsKeyboardHeightMultiplier.text =
+                        getKeyboardHeightPercentageText(newPercentage)
+                }
+            }
+        }
+    }
+
+    private fun getKeyboardHeightPercentageText(keyboardHeightPercentage: Int): String =
+        "$keyboardHeightPercentage%"
+
+    private fun setupShowClipboardContent() {
+        binding.apply {
+            settingsShowClipboardContent.isChecked = config.showClipboardContent
+            settingsShowClipboardContentHolder.setOnClickListener {
+                settingsShowClipboardContent.toggle()
+                config.showClipboardContent = settingsShowClipboardContent.isChecked
+            }
+        }
+    }
+
+    private fun setupSentencesCapitalization() {
+        binding.apply {
+            settingsStartSentencesCapitalized.isChecked = config.enableSentencesCapitalization
+            settingsStartSentencesCapitalizedHolder.setOnClickListener {
+                settingsStartSentencesCapitalized.toggle()
+                config.enableSentencesCapitalization = settingsStartSentencesCapitalized.isChecked
+            }
+        }
+    }
+
+    private fun setupShowEmojiKey() {
+        binding.apply {
+            settingsShowEmojiKeyHolder.setOnClickListener {
+                settingsShowEmojiKey.toggle()
+                config.showEmojiKey = settingsShowEmojiKey.isChecked
+                if (settingsShowEmojiKey.isChecked) {
+                    config.showLanguageSwitchKey = false
+                    settingsShowLanguageSwitchKey.isChecked = false
+                }
+            }
+            settingsShowEmojiKey.isChecked = config.showEmojiKey
+        }
+    }
+
+    private fun setupShowLanguageSwitchKey() {
+        binding.apply {
+            settingsShowLanguageSwitchKeyHolder.setOnClickListener {
+                settingsShowLanguageSwitchKey.toggle()
+                config.showLanguageSwitchKey = settingsShowLanguageSwitchKey.isChecked
+                if (settingsShowLanguageSwitchKey.isChecked) {
+                    config.showEmojiKey = false
+                    settingsShowEmojiKey.isChecked = false
+                }
+            }
+            settingsShowLanguageSwitchKey.isChecked = config.showLanguageSwitchKey
+        }
+    }
+
+    private fun setupShowNumbersRow() {
+        binding.apply {
+            settingsShowNumbersRow.isChecked = config.showNumbersRow
+            settingsShowNumbersRowHolder.setOnClickListener {
+                settingsShowNumbersRow.toggle()
+                config.showNumbersRow = settingsShowNumbersRow.isChecked
+            }
+        }
+    }
+
+    private fun setupVoiceInputMethod() {
+        binding.apply {
+            settingsVoiceInputMethodValue.text =
+                getCurrentVoiceInputMethod()?.first?.loadLabel(packageManager)
+                    ?: getString(R.string.none)
+            settingsVoiceInputMethodHolder.setOnClickListener {
+                val inputMethods = getVoiceInputMethods()
+                if (inputMethods.isEmpty()) {
+                    toast(R.string.no_app_found)
+                    return@setOnClickListener
+                }
+
+                RadioGroupDialog(
+                    activity = this@SettingsActivity,
+                    items = getVoiceInputRadioItems(),
+                    checkedItemId = inputMethods.indexOf(getCurrentVoiceInputMethod(inputMethods))
+                ) {
+                    config.voiceInputMethod = inputMethods.getOrNull(it as Int)?.first?.id.orEmpty()
+                    settingsVoiceInputMethodValue.text =
+                        getCurrentVoiceInputMethod(inputMethods)?.first?.loadLabel(packageManager)
+                            ?: getString(R.string.none)
+                }
+            }
+        }
+    }
+
+    private fun setupBackupClips() {
+        binding.settingsBackupClipsHolder.setOnClickListener {
+            Intent(this, ManageClipboardItemsActivity::class.java).apply {
+                putExtra("action_backup", true)
+                startActivity(this)
+            }
+        }
+    }
+
+    private fun setupRestoreClips() {
+        binding.settingsRestoreClipsHolder.setOnClickListener {
+            Intent(this, ManageClipboardItemsActivity::class.java).apply {
+                putExtra("action_restore", true)
+                startActivity(this)
+            }
+        }
+    }
+}

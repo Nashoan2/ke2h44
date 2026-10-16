@@ -1,0 +1,1024 @@
+package org.fossify.keyboard.services
+
+import android.annotation.SuppressLint
+import android.content.ClipboardManager
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.res.Configuration
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import org.fossify.commons.helpers.ensureBackgroundThread
+import org.fossify.keyboard.extensions.clipsDB
+import org.fossify.keyboard.models.Clip
+import android.graphics.Bitmap
+import android.graphics.drawable.Icon
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.RippleDrawable
+import android.icu.text.BreakIterator
+import android.icu.util.ULocale
+import android.inputmethodservice.InputMethodService
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.text.InputType.TYPE_CLASS_DATETIME
+import android.text.InputType.TYPE_CLASS_NUMBER
+import android.text.InputType.TYPE_CLASS_PHONE
+import android.text.InputType.TYPE_CLASS_TEXT
+import android.text.InputType.TYPE_MASK_CLASS
+import android.text.InputType.TYPE_MASK_VARIATION
+import android.text.InputType.TYPE_NULL
+import android.text.TextUtils
+import android.util.Size
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.CursorAnchorInfo
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.EditorInfo.IME_ACTION_NONE
+import android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION
+import android.view.inputmethod.EditorInfo.IME_MASK_ACTION
+import android.view.inputmethod.ExtractedTextRequest
+import android.view.inputmethod.InlineSuggestionsRequest
+import android.view.inputmethod.InlineSuggestionsResponse
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.InputMethodSubtype
+import android.widget.inline.InlinePresentationSpec
+import androidx.annotation.RequiresApi
+import androidx.autofill.inline.UiVersions
+import androidx.autofill.inline.common.ImageViewStyle
+import androidx.autofill.inline.common.TextViewStyle
+import androidx.autofill.inline.common.ViewStyle
+import androidx.autofill.inline.v1.InlineSuggestionUi
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toBitmap
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat.Type
+import androidx.core.view.updatePadding
+import org.fossify.commons.extensions.applyColorFilter
+import org.fossify.commons.extensions.getProperBackgroundColor
+import org.fossify.commons.extensions.getProperTextColor
+import org.fossify.commons.extensions.getSharedPrefs
+import org.fossify.commons.extensions.setSystemBarsAppearance
+import org.fossify.commons.helpers.ACCENT_COLOR
+import org.fossify.commons.helpers.BACKGROUND_COLOR
+import org.fossify.commons.helpers.CUSTOM_ACCENT_COLOR
+import org.fossify.commons.helpers.CUSTOM_BACKGROUND_COLOR
+import org.fossify.commons.helpers.CUSTOM_PRIMARY_COLOR
+import org.fossify.commons.helpers.CUSTOM_TEXT_COLOR
+import org.fossify.commons.helpers.IS_GLOBAL_THEME_ENABLED
+import org.fossify.commons.helpers.IS_SYSTEM_THEME_ENABLED
+import org.fossify.commons.helpers.PRIMARY_COLOR
+import org.fossify.commons.helpers.TEXT_COLOR
+import org.fossify.commons.helpers.isNougatPlus
+import org.fossify.commons.helpers.isPiePlus
+import org.fossify.keyboard.R
+import org.fossify.keyboard.activities.SettingsActivity
+import org.fossify.keyboard.databinding.KeyboardViewKeyboardBinding
+import org.fossify.keyboard.extensions.config
+import org.fossify.keyboard.extensions.getKeyboardBackgroundColor
+import org.fossify.keyboard.extensions.getKeyboardLanguageText
+import org.fossify.keyboard.extensions.getSelectedLanguagesSorted
+import org.fossify.keyboard.extensions.getStrokeColor
+import org.fossify.keyboard.extensions.safeStorageContext
+import org.fossify.keyboard.helpers.HEIGHT_PERCENTAGE
+import org.fossify.keyboard.helpers.KEYBOARD_LANGUAGE
+import org.fossify.keyboard.helpers.KEYBOARD_THEME
+import org.fossify.keyboard.helpers.LANGUAGE_ARABIC
+import org.fossify.keyboard.helpers.LANGUAGE_ENGLISH_QWERTY
+import org.fossify.keyboard.helpers.MyKeyboard
+import org.fossify.keyboard.helpers.SHOW_KEY_BORDERS
+import org.fossify.keyboard.helpers.SHOW_NUMBERS_ROW
+import org.fossify.keyboard.helpers.ShiftState
+import org.fossify.keyboard.helpers.VOICE_INPUT_METHOD
+import org.fossify.keyboard.interfaces.OnKeyboardActionListener
+import org.fossify.keyboard.views.MyKeyboardView
+import java.io.ByteArrayOutputStream
+import java.util.Locale
+
+
+// based on https://www.androidauthority.com/lets-build-custom-keyboard-android-832362/
+class SimpleKeyboardIME : InputMethodService(), OnKeyboardActionListener, SharedPreferences.OnSharedPreferenceChangeListener {
+    companion object {
+        // How quickly do we have to double tap shift to enable permanent caps lock
+        private var SHIFT_PERM_TOGGLE_SPEED = 500
+
+        // Keyboard modes
+        const val KEYBOARD_LETTERS = 0
+        const val KEYBOARD_SYMBOLS = 1
+        const val KEYBOARD_SYMBOLS_SHIFT = 2
+        const val KEYBOARD_NUMBERS = 3
+        const val KEYBOARD_PHONE = 4
+        const val KEYBOARD_SYMBOLS_ALT = 5
+    }
+
+    private var keyboard: MyKeyboard? = null
+    private var keyboardView: MyKeyboardView? = null
+    private var lastShiftPressTS = 0L
+    private var keyboardMode = KEYBOARD_LETTERS
+    private var inputTypeClass = TYPE_CLASS_TEXT
+    private var inputTypeClassVariation = TYPE_CLASS_TEXT
+    private var enterKeyType = IME_ACTION_NONE
+    private var switchToLetters = false
+    private var breakIterator: BreakIterator? = null
+
+    private lateinit var binding: KeyboardViewKeyboardBinding
+
+    private var mClipboardManager: ClipboardManager? = null
+    private var mClipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    private var imeChangeObserver: ContentObserver? = null
+    private var isCurrentlyDefaultIme = false
+    private var activationTimestamp: Long = 0L
+    private var initialIgnoredClipFingerprint: String? = null
+    private var lastSyncClipText: String? = null
+    private var lastSyncTime: Long = 0L
+
+    override fun onCreate() {
+        super.onCreate()
+        registerImeChangeObserver()
+        checkAndUpdateImeState()
+    }
+
+    private fun registerImeChangeObserver() {
+        if (imeChangeObserver != null) return
+        imeChangeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                checkAndUpdateImeState()
+            }
+        }
+        try {
+            val uri = Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD)
+            contentResolver.registerContentObserver(uri, false, imeChangeObserver!!)
+        } catch (ignored: Exception) {
+        }
+    }
+
+    private fun unregisterImeChangeObserver() {
+        try {
+            imeChangeObserver?.let { contentResolver.unregisterContentObserver(it) }
+            imeChangeObserver = null
+        } catch (ignored: Exception) {
+        }
+    }
+
+    fun isDefaultIme(): Boolean {
+        return try {
+            val defaultIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: ""
+            defaultIme.contains(packageName)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun checkAndUpdateImeState() {
+        val isDefault = isDefaultIme()
+        if (isDefault) {
+            if (!isCurrentlyDefaultIme) {
+                isCurrentlyDefaultIme = true
+                activationTimestamp = System.currentTimeMillis()
+                // Capture the fingerprint of whatever text was copied while using the other keyboard
+                initialIgnoredClipFingerprint = getSystemClipFingerprint()
+                initClipboardListener()
+            } else {
+                initClipboardListener()
+            }
+        } else {
+            isCurrentlyDefaultIme = false
+            initialIgnoredClipFingerprint = null
+            removeClipboardListener()
+        }
+    }
+
+    private fun getSystemClipFingerprint(): String? {
+        return try {
+            val cm = (getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager) ?: return null
+            val clip = cm.primaryClip ?: return null
+            if (clip.itemCount <= 0) return null
+            val sb = StringBuilder()
+            for (i in 0 until clip.itemCount) {
+                val item = clip.getItemAt(i) ?: continue
+                val text = item.text?.toString()?.trim()
+                    ?: item.coerceToText(this).toString().trim()
+                if (text.isNotEmpty()) {
+                    sb.append(text).append(":::")
+                }
+            }
+            if (sb.isEmpty()) null else sb.toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun shouldIgnoreClip(text: String?): Boolean {
+        if (!isDefaultIme()) return true
+        val ignored = initialIgnoredClipFingerprint ?: return false
+        val trimmed = text?.trim() ?: return true
+        if (trimmed.isEmpty()) return true
+        return ignored == "$trimmed:::" || ignored == trimmed || ignored.contains("$trimmed:::")
+    }
+
+    private fun initClipboardListener() {
+        if (!isDefaultIme()) {
+            removeClipboardListener()
+            return
+        }
+        if (mClipboardListener != null) return
+        try {
+            mClipboardManager = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+            mClipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+                syncClipboardInternal()
+            }
+            mClipboardManager?.addPrimaryClipChangedListener(mClipboardListener)
+        } catch (ignored: Exception) {
+        }
+    }
+
+    private fun removeClipboardListener() {
+        try {
+            mClipboardListener?.let { mClipboardManager?.removePrimaryClipChangedListener(it) }
+            mClipboardListener = null
+        } catch (ignored: Exception) {
+        }
+    }
+
+    private fun syncClipboardInternal() {
+        if (!isDefaultIme()) {
+            removeClipboardListener()
+            return
+        }
+
+        try {
+            val cm = mClipboardManager ?: (getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager) ?: return
+            val clip = try {
+                cm.primaryClip
+            } catch (e: Exception) {
+                null
+            } ?: return
+            if (clip.itemCount <= 0) return
+
+            val textList = ArrayList<String>()
+            val fingerprintBuilder = StringBuilder()
+            for (i in 0 until clip.itemCount) {
+                val item = clip.getItemAt(i) ?: continue
+                val text = item.text?.toString()?.trim()
+                    ?: item.coerceToText(this).toString().trim()
+                if (text.isNotEmpty()) {
+                    textList.add(text)
+                    fingerprintBuilder.append(text).append(":::")
+                }
+            }
+            if (textList.isEmpty()) return
+
+            val currentFingerprint = fingerprintBuilder.toString()
+            if (initialIgnoredClipFingerprint != null && currentFingerprint == initialIgnoredClipFingerprint) {
+                return
+            }
+            if (initialIgnoredClipFingerprint != null && textList.all { shouldIgnoreClip(it) }) {
+                return
+            }
+            initialIgnoredClipFingerprint = null
+
+            val firstItemText = textList[0]
+            val now = System.currentTimeMillis()
+            if (firstItemText == lastSyncClipText && (now - lastSyncTime) < 200L) {
+                return
+            }
+            lastSyncClipText = firstItemText
+            lastSyncTime = now
+
+            ensureBackgroundThread {
+                var addedAny = false
+                for (clipText in textList) {
+                    // Delete older copy from recent clips so this newly copied text moves to the top
+                    clipsDB.deleteRecentClipWithValue(clipText)
+                    val newClip = Clip(null, clipText, isPinned = false)
+                    clipsDB.insertOrUpdate(newClip)
+                    addedAny = true
+                }
+
+                if (addedAny) {
+                    // Retain up to 4000 unpinned items (surpassing the 3000 limit requested)
+                    clipsDB.trimRecentClips()
+
+                    Handler(Looper.getMainLooper()).post {
+                        keyboardView?.apply {
+                            handleClipboard()
+                            setupStoredClips()
+                        }
+                    }
+                }
+            }
+        } catch (ignored: Exception) {
+        }
+    }
+
+    override fun onInitializeInterface() {
+        super.onInitializeInterface()
+        safeStorageContext.getSharedPrefs().registerOnSharedPreferenceChangeListener(this)
+    }
+
+    override fun onCreateInputView(): View {
+        binding = KeyboardViewKeyboardBinding.inflate(layoutInflater)
+        if (keyboard == null) {
+            keyboard = createNewKeyboard()
+        }
+        keyboardView = binding.keyboardView.apply {
+            setKeyboardHolder(binding)
+            setKeyboard(keyboard!!)
+            setEditorInfo(currentInputEditorInfo)
+            setupEdgeToEdge()
+            mOnKeyboardActionListener = this@SimpleKeyboardIME
+        }
+
+        return binding.root
+    }
+
+    override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(editorInfo, restarting)
+        checkAndUpdateImeState()
+        updateBackgroundColors()
+        if (inputTypeClass == TYPE_CLASS_NUMBER || inputTypeClass == TYPE_CLASS_PHONE) {
+            keyboardView?.openNumericKeypad()
+        } else {
+            keyboardView?.closeAllPanels()
+            keyboardMode = KEYBOARD_LETTERS
+            keyboard = createNewKeyboard()
+            keyboard?.let { keyboardView?.setKeyboard(it) }
+        }
+        keyboardView?.handleClipboard()
+        keyboardView?.ensureToolbarVisible()
+        keyboardView?.requestLayout()
+        keyboardView?.invalidateAllKeys()
+    }
+
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        if (::binding.isInitialized && binding.keyboardHolder.isShown) {
+            val location = IntArray(2)
+            binding.keyboardHolder.getLocationInWindow(location)
+            if (location[1] > 0) {
+                outInsets.contentTopInsets = location[1]
+                outInsets.visibleTopInsets = location[1]
+                outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_CONTENT
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::binding.isInitialized) {
+            reloadKeyboard()
+            keyboardView?.requestLayout()
+            keyboardView?.invalidateAllKeys()
+        }
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        keyboardView?.closeAllPanels()
+        keyboardMode = KEYBOARD_LETTERS
+    }
+
+    override fun onFinishInput() {
+        super.onFinishInput()
+    }
+
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        return super.onUnbind(intent)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterImeChangeObserver()
+        removeClipboardListener()
+        mClipboardManager = null
+        keyboardView?.unregisterClipboardListener()
+        keyboardView?.closeAllPanels()
+        try {
+            safeStorageContext.getSharedPrefs().unregisterOnSharedPreferenceChangeListener(this)
+        } catch (ignored: Exception) {
+        }
+    }
+
+    override fun onPress(primaryCode: Int) {
+        if (primaryCode != 0) {
+            keyboardView?.performKeypressFeedback(primaryCode)
+        }
+    }
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        checkAndUpdateImeState()
+        val newInputTypeClass = attribute?.inputType?.and(TYPE_MASK_CLASS) ?: TYPE_CLASS_TEXT
+        val newInputTypeClassVariation = attribute?.inputType?.and(TYPE_MASK_VARIATION) ?: 0
+        val newEnterKeyType = attribute?.imeOptions?.and(IME_MASK_ACTION or IME_FLAG_NO_ENTER_ACTION) ?: 0
+
+        val inputTypeChanged = newInputTypeClass != inputTypeClass ||
+            newInputTypeClassVariation != inputTypeClassVariation ||
+            newEnterKeyType != enterKeyType
+
+        inputTypeClass = newInputTypeClass
+        inputTypeClassVariation = newInputTypeClassVariation
+        enterKeyType = newEnterKeyType
+
+        if (!restarting || inputTypeChanged) {
+            keyboard = createNewKeyboard()
+            keyboard?.let { keyboardView?.setKeyboard(it) }
+            if (inputTypeClass == TYPE_CLASS_NUMBER || inputTypeClass == TYPE_CLASS_PHONE) {
+                keyboardView?.openNumericKeypad()
+            }
+        }
+        attribute?.let { keyboardView?.setEditorInfo(it) }
+        if (isNougatPlus()) {
+            breakIterator = BreakIterator.getCharacterInstance(ULocale.getDefault())
+        }
+        updateShiftKeyState()
+    }
+
+    private fun updateShiftKeyState() {
+        if (keyboard?.mShiftState == ShiftState.ON_PERMANENT) {
+            return
+        }
+
+        val editorInfo = currentInputEditorInfo
+        if (config.enableSentencesCapitalization && editorInfo != null && editorInfo.inputType != TYPE_NULL) {
+            val capsMode = currentInputConnection?.getCursorCapsMode(editorInfo.inputType) ?: 0
+            if (capsMode != 0) {
+                keyboard?.setShifted(ShiftState.ON_ONE_CHAR)
+                keyboardView?.invalidateAllKeys()
+                return
+            }
+        }
+
+        keyboard?.setShifted(ShiftState.OFF)
+        keyboardView?.invalidateAllKeys()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    override fun onCreateInlineSuggestionsRequest(uiExtras: Bundle): InlineSuggestionsRequest {
+        val maxWidth = resources.getDimensionPixelSize(R.dimen.suggestion_max_width)
+
+        return InlineSuggestionsRequest.Builder(
+            listOf(
+                InlinePresentationSpec.Builder(
+                    Size(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                    Size(maxWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+                ).setStyle(buildSuggestionTextStyle()).build()
+            )
+        ).setMaxSuggestionCount(InlineSuggestionsRequest.SUGGESTION_COUNT_UNLIMITED)
+            .build()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    override fun onInlineSuggestionsResponse(response: InlineSuggestionsResponse): Boolean {
+        keyboardView?.clearClipboardViews()
+
+        response.inlineSuggestions.forEach {
+            it.inflate(this, Size(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT), this.mainExecutor) { view ->
+                // If inflation fails for whatever reason, passed view will be null
+                if (view != null) {
+                    keyboardView?.addToClipboardViews(view, addToFront = it.info.isPinned)
+                }
+            }
+        }
+
+        return true
+    }
+
+    override fun onKey(code: Int) {
+        val inputConnection = currentInputConnection
+        if (keyboard == null || inputConnection == null) {
+            return
+        }
+
+        if (code != MyKeyboard.KEYCODE_SHIFT) {
+            lastShiftPressTS = 0
+        }
+
+        when (code) {
+            MyKeyboard.KEYCODE_DELETE -> {
+                val selectedText = inputConnection.getSelectedText(0)
+                if (TextUtils.isEmpty(selectedText)) {
+                    val count = getCountToDelete(inputConnection)
+                    inputConnection.deleteSurroundingText(count, 0)
+                } else {
+                    inputConnection.commitText("", 1)
+                }
+            }
+
+            MyKeyboard.KEYCODE_SHIFT -> {
+                if (keyboardMode == KEYBOARD_LETTERS) {
+                    when {
+                        keyboard!!.mShiftState == ShiftState.ON_PERMANENT -> keyboard!!.mShiftState = ShiftState.OFF
+                        System.currentTimeMillis() - lastShiftPressTS < SHIFT_PERM_TOGGLE_SPEED -> keyboard!!.mShiftState = ShiftState.ON_PERMANENT
+                        keyboard!!.mShiftState == ShiftState.ON_ONE_CHAR -> keyboard!!.mShiftState = ShiftState.OFF
+                        keyboard!!.mShiftState == ShiftState.OFF -> keyboard!!.mShiftState = ShiftState.ON_ONE_CHAR
+                    }
+
+                    lastShiftPressTS = System.currentTimeMillis()
+                } else {
+                    val keyboardXml = if (keyboardMode == KEYBOARD_SYMBOLS) {
+                        keyboardMode = KEYBOARD_SYMBOLS_SHIFT
+                        R.xml.keys_symbols_shift
+                    } else {
+                        keyboardMode = KEYBOARD_SYMBOLS
+                        R.xml.keys_symbols
+                    }
+                    keyboard = constructKeyboard(keyboardXml, enterKeyType)
+                    keyboardView!!.setKeyboard(keyboard!!)
+                }
+                keyboardView!!.invalidateAllKeys()
+            }
+
+            MyKeyboard.KEYCODE_ENTER -> {
+                val imeOptionsActionId = getImeOptionsActionId()
+                if (imeOptionsActionId != IME_ACTION_NONE) {
+                    inputConnection.performEditorAction(imeOptionsActionId)
+                } else {
+                    inputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    inputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+                }
+            }
+
+            MyKeyboard.KEYCODE_SYMBOLS_MODE_CHANGE -> {
+                keyboardView?.closeNumericKeypad()
+                val keyboardXML = if (keyboardMode == KEYBOARD_SYMBOLS || keyboardMode == KEYBOARD_SYMBOLS_SHIFT) {
+                    keyboardMode = KEYBOARD_SYMBOLS_ALT
+                    R.xml.keys_symbols_alt
+                } else {
+                    keyboardMode = KEYBOARD_SYMBOLS
+                    R.xml.keys_symbols
+                }
+
+                keyboard = constructKeyboard(keyboardXML, enterKeyType)
+                keyboardView!!.setKeyboard(keyboard!!)
+            }
+
+            MyKeyboard.KEYCODE_MODE_CHANGE -> {
+                if (keyboardMode == KEYBOARD_LETTERS) {
+                    keyboardView?.openNumericKeypad()
+                } else {
+                    keyboardMode = KEYBOARD_LETTERS
+                    keyboardView?.closeAllPanels()
+                    val keyboardXml = getKeyboardLayoutXML()
+                    keyboard = constructKeyboard(keyboardXml, enterKeyType)
+                    keyboardView!!.setKeyboard(keyboard!!)
+                }
+            }
+
+            MyKeyboard.KEYCODE_LAM_ALEF -> {
+                inputConnection.commitText("لا", 1)
+            }
+
+            MyKeyboard.KEYCODE_EMOJI_OR_LANGUAGE -> {
+                val sortedLanguages = getSelectedLanguagesSorted()
+                if (sortedLanguages.size > 1) {
+                    val currentIndex = sortedLanguages.indexOf(config.keyboardLanguage)
+                    val nextIndex = (currentIndex + 1) % sortedLanguages.size
+                    config.keyboardLanguage = sortedLanguages[nextIndex]
+                } else {
+                    config.keyboardLanguage = if (config.keyboardLanguage == LANGUAGE_ARABIC) {
+                        LANGUAGE_ENGLISH_QWERTY
+                    } else {
+                        LANGUAGE_ARABIC
+                    }
+                }
+                reloadKeyboard()
+            }
+
+            MyKeyboard.KEYCODE_POPUP_EMOJI -> keyboardView?.openEmojiPalette()
+            MyKeyboard.KEYCODE_POPUP_SETTINGS -> Intent(this, SettingsActivity::class.java)
+                .apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(this)
+                }
+
+            else -> {
+                var codeChar = code.toChar()
+                val originalText = inputConnection.getExtractedText(ExtractedTextRequest(), 0)?.text
+
+                if (Character.isLetter(codeChar) && keyboard!!.mShiftState > ShiftState.OFF) {
+                    codeChar = Character.toUpperCase(codeChar)
+                }
+
+                // If the keyboard is set to symbols and the user presses space, we usually should switch back to the letters keyboard.
+                // However, avoid doing that in cases when the EditText for example requires numbers as the input.
+                // We can detect that by the text not changing on pressing Space.
+                if (keyboardMode != KEYBOARD_LETTERS && inputTypeClass == TYPE_CLASS_TEXT && code == MyKeyboard.KEYCODE_SPACE) {
+                    inputConnection.commitText(codeChar.toString(), 1)
+                    val newText = inputConnection.getExtractedText(ExtractedTextRequest(), 0)?.text
+                    if (originalText != newText) {
+                        switchToLetters = keyboardMode != KEYBOARD_SYMBOLS_ALT
+                    }
+                } else {
+                    inputConnection.commitText(codeChar.toString(), 1)
+                    updateShiftKeyState()
+                }
+            }
+        }
+    }
+
+    private fun getCountToDelete(inputConnection: InputConnection): Int {
+        if (breakIterator == null || !isNougatPlus()) {
+            return 1
+        }
+
+        val prevText = inputConnection.getTextBeforeCursor(8, 0)
+
+
+        if (!TextUtils.isEmpty(prevText)) {
+            return breakIterator?.let {
+                it.setText(prevText.toString())
+                val end = it.last()
+                val start = it.previous()
+                (end - (if (start == BreakIterator.DONE) 0 else start)).coerceIn(0, prevText?.length)
+            } ?: 1
+        }
+
+        return 1
+    }
+
+    override fun onActionUp() {
+        if (switchToLetters) {
+            // TODO: Change keyboardMode to enum class
+            keyboardMode = KEYBOARD_LETTERS
+
+            keyboard = constructKeyboard(getKeyboardLayoutXML(), enterKeyType)
+
+            val editorInfo = currentInputEditorInfo
+            if (editorInfo != null && editorInfo.inputType != TYPE_NULL && keyboard?.mShiftState != ShiftState.ON_PERMANENT) {
+                val capsMode = currentInputConnection?.getCursorCapsMode(editorInfo.inputType) ?: 0
+                if (capsMode != 0) {
+                    keyboard?.setShifted(ShiftState.ON_ONE_CHAR)
+                }
+            }
+
+            keyboardView!!.setKeyboard(keyboard!!)
+            switchToLetters = false
+        }
+    }
+
+    private var isSelectMode = false
+
+    override fun toggleSelectMode(): Boolean {
+        isSelectMode = !isSelectMode
+        return isSelectMode
+    }
+
+    override fun moveCursorLeft() {
+        if (isSelectMode) {
+            val ic = currentInputConnection
+            val extracted = ic?.getExtractedText(ExtractedTextRequest(), 0)
+            if (extracted != null) {
+                val selStart = extracted.selectionStart
+                val selEnd = extracted.selectionEnd
+                val newStart = (selStart - 1).coerceAtLeast(0)
+                ic.setSelection(newStart, selEnd)
+                keyboardView?.performHapticHandleMove()
+                return
+            }
+        }
+        moveCursor(false)
+    }
+
+    override fun moveCursorRight() {
+        if (isSelectMode) {
+            val ic = currentInputConnection
+            val extracted = ic?.getExtractedText(ExtractedTextRequest(), 0)
+            if (extracted != null) {
+                val len = extracted.text?.length ?: 0
+                val selStart = extracted.selectionStart
+                val selEnd = extracted.selectionEnd
+                val newEnd = (selEnd + 1).coerceAtMost(len)
+                ic.setSelection(selStart, newEnd)
+                keyboardView?.performHapticHandleMove()
+                return
+            }
+        }
+        moveCursor(true)
+    }
+
+    override fun moveCursorUp() {
+        sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_UP)
+    }
+
+    override fun moveCursorDown() {
+        sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_DOWN)
+    }
+
+    override fun selectAll() {
+        currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
+    }
+
+    override fun copyText() {
+        currentInputConnection?.performContextMenuAction(android.R.id.copy)
+        binding.root.postDelayed({
+            syncClipboardInternal()
+        }, 150L)
+    }
+
+    override fun cutText() {
+        currentInputConnection?.performContextMenuAction(android.R.id.cut)
+        binding.root.postDelayed({
+            syncClipboardInternal()
+        }, 150L)
+    }
+
+    override fun pasteText() {
+        currentInputConnection?.performContextMenuAction(android.R.id.paste)
+    }
+
+    override fun moveToStart() {
+        currentInputConnection?.setSelection(0, 0)
+    }
+
+    override fun moveToEnd() {
+        val ic = currentInputConnection
+        val extracted = ic?.getExtractedText(ExtractedTextRequest(), 0)
+        val len = extracted?.text?.length ?: 0
+        ic?.setSelection(len, len)
+    }
+
+    override fun deleteChar() {
+        sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+    }
+
+    override fun insertSpace() {
+        currentInputConnection?.commitText(" ", 1)
+    }
+
+    override fun undo() {
+        val ic = currentInputConnection
+        val handled = ic?.performContextMenuAction(android.R.id.undo) ?: false
+        if (!handled) {
+            val now = System.currentTimeMillis()
+            ic?.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON))
+            ic?.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON))
+        }
+    }
+
+    override fun onText(text: String) {
+        currentInputConnection?.commitText(text, 1)
+    }
+
+    override fun reloadKeyboard() {
+        val keyboard = createNewKeyboard()
+        this.keyboard = keyboard
+        keyboardView?.setKeyboard(keyboard)
+    }
+
+    override fun changeInputMethod(id: String, subtype: InputMethodSubtype) {
+        try {
+            if (isPiePlus()) {
+                switchInputMethod(id, subtype)
+            } else {
+                switchInputMethod(id)
+            }
+        } catch (e: Exception) {
+            try {
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.showInputMethodPicker()
+            } catch (e2: Exception) {
+                // ignore
+            }
+        }
+    }
+
+    private fun createNewKeyboard(): MyKeyboard {
+        val keyboardXml = when (inputTypeClass) {
+            TYPE_CLASS_NUMBER -> {
+                keyboardMode = KEYBOARD_NUMBERS
+                R.xml.keys_numbers
+            }
+
+            TYPE_CLASS_PHONE -> {
+                keyboardMode = KEYBOARD_PHONE
+                R.xml.keys_phone
+            }
+
+            TYPE_CLASS_DATETIME -> {
+                keyboardMode = KEYBOARD_SYMBOLS
+                R.xml.keys_symbols
+            }
+
+            else -> {
+                keyboardMode = KEYBOARD_LETTERS
+                getKeyboardLayoutXML()
+            }
+        }
+        return constructKeyboard(keyboardXml, enterKeyType)
+    }
+
+    override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        updateShiftKeyState()
+    }
+
+    override fun onUpdateCursorAnchorInfo(cursorAnchorInfo: CursorAnchorInfo?) {
+        super.onUpdateCursorAnchorInfo(cursorAnchorInfo)
+        updateShiftKeyState()
+    }
+
+    private fun moveCursor(moveRight: Boolean) {
+        val inputConnection = currentInputConnection
+        val extractedText = inputConnection?.getExtractedText(ExtractedTextRequest(), 0)
+        val text = extractedText?.text
+        if (text != null) {
+            val oldPos = extractedText.selectionStart
+            val newPos = if (moveRight) {
+                oldPos + 1
+            } else {
+                oldPos - 1
+            }.coerceIn(0, text.length)
+
+            if (newPos != oldPos) {
+                inputConnection.setSelection(newPos, newPos)
+                keyboardView?.performHapticHandleMove()
+                return
+            }
+        }
+        sendDownUpKeyEvents(if (moveRight) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
+        keyboardView?.performHapticHandleMove()
+    }
+
+    private fun getImeOptionsActionId(): Int {
+        return if (currentInputEditorInfo.imeOptions and IME_FLAG_NO_ENTER_ACTION != 0) {
+            IME_ACTION_NONE
+        } else {
+            currentInputEditorInfo.imeOptions and IME_MASK_ACTION
+        }
+    }
+
+    private fun getKeyboardLayoutXML(): Int {
+        return when (baseContext.config.keyboardLanguage) {
+            LANGUAGE_ARABIC -> R.xml.keys_letters_arabic
+            else -> R.xml.keys_letters_english_qwerty
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    @SuppressLint("RestrictedApi", "UseCompatLoadingForDrawables")
+    private fun buildSuggestionTextStyle(): Bundle {
+        val stylesBuilder = UiVersions.newStylesBuilder()
+
+        val verticalPadding = resources.getDimensionPixelSize(R.dimen.small_margin)
+        val horizontalPadding = resources.getDimensionPixelSize(R.dimen.activity_margin)
+
+        val textSize = resources.getDimension(R.dimen.label_text_size) / resources.displayMetrics.scaledDensity
+
+        val rippleBg = resources.getDrawable(R.drawable.clipboard_background, theme) as RippleDrawable
+        val layerDrawable = rippleBg.findDrawableByLayerId(R.id.clipboard_background_holder) as LayerDrawable
+        layerDrawable.findDrawableByLayerId(R.id.clipboard_background_stroke).applyColorFilter(getStrokeColor())
+        layerDrawable.findDrawableByLayerId(R.id.clipboard_background_shape).applyColorFilter(getProperBackgroundColor())
+
+        val maxWidth = resources.getDimensionPixelSize(R.dimen.suggestion_max_width)
+        val height = resources.getDimensionPixelSize(R.dimen.label_text_size) + verticalPadding * 2
+        val chipBackgroundIcon: Icon = rippleBg.toBitmap(width = maxWidth, height = height).toIcon()
+
+        val chipStyle =
+            ViewStyle.Builder()
+                // don't use Icon.createWithBitmap(), it crashes the app. Issue https://github.com/SimpleMobileTools/Simple-Keyboard/issues/248
+                .setBackground(chipBackgroundIcon)
+                .setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+                .build()
+
+        val iconStyle = ImageViewStyle.Builder().build()
+
+        val style = InlineSuggestionUi.newStyleBuilder()
+            .setSingleIconChipStyle(chipStyle)
+            .setChipStyle(chipStyle)
+            .setStartIconStyle(iconStyle)
+            .setEndIconStyle(iconStyle)
+            .setSingleIconChipIconStyle(iconStyle)
+            .setTitleStyle(
+                TextViewStyle.Builder()
+                    .setLayoutMargin(0, 0, horizontalPadding, 0)
+                    .setTextColor(getProperTextColor())
+                    .setTextSize(textSize)
+                    .build()
+            )
+            .setSubtitleStyle(
+                TextViewStyle.Builder()
+                    .setTextColor(getProperTextColor())
+                    .setTextSize(textSize)
+                    .build()
+            )
+            .build()
+        stylesBuilder.addStyle(style)
+        return stylesBuilder.build()
+    }
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        if (key != null && key in arrayOf(
+                SHOW_KEY_BORDERS, KEYBOARD_LANGUAGE, KEYBOARD_THEME, HEIGHT_PERCENTAGE, SHOW_NUMBERS_ROW, VOICE_INPUT_METHOD,
+                TEXT_COLOR, BACKGROUND_COLOR, PRIMARY_COLOR, ACCENT_COLOR, CUSTOM_TEXT_COLOR, CUSTOM_BACKGROUND_COLOR,
+                CUSTOM_PRIMARY_COLOR, CUSTOM_ACCENT_COLOR, IS_GLOBAL_THEME_ENABLED, IS_SYSTEM_THEME_ENABLED
+            )
+        ) {
+            if (::binding.isInitialized) {
+                if (key == HEIGHT_PERCENTAGE || key == SHOW_NUMBERS_ROW || key == KEYBOARD_LANGUAGE) {
+                    reloadKeyboard()
+                }
+                keyboardView?.setupKeyboard()
+                keyboardView?.invalidateAllKeys()
+                updateBackgroundColors()
+            }
+        }
+    }
+
+    private fun setupEdgeToEdge() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.keyboardHolder) { _, insets ->
+            val navBars = insets.getInsets(Type.navigationBars())
+            val targetBottom = navBars.bottom
+            if (binding.keyboardHolder.paddingBottom != targetBottom) {
+                binding.keyboardHolder.updatePadding(bottom = targetBottom)
+                keyboardView?.requestLayout()
+                keyboardView?.invalidateAllKeys()
+            }
+            insets
+        }
+    }
+
+    private fun updateBackgroundColors() {
+        val backgroundColor = safeStorageContext.getKeyboardBackgroundColor()
+        binding.keyboardHolder.setBackgroundColor(backgroundColor)
+        window.window?.setSystemBarsAppearance(backgroundColor)
+    }
+
+    private fun Bitmap.toIcon(): Icon {
+        val byteArray: ByteArray = ByteArrayOutputStream().let { outputStream ->
+            this.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            outputStream.toByteArray()
+        }
+        this.recycle()
+
+        return Icon.createWithData(byteArray, 0, byteArray.size)
+    }
+
+    private fun constructKeyboard(keyboardXml: Int, enterKeyType: Int): MyKeyboard {
+        val displayWidth = keyboardView?.width?.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val keyboard = MyKeyboard(this, keyboardXml, enterKeyType, displayWidth)
+        return adjustBottomRow(keyboard)
+    }
+
+    // hacky, but good enough for now
+    private fun adjustBottomRow(keyboard: MyKeyboard): MyKeyboard {
+        keyboard.mKeys?.let { keys ->
+            val spaceKeyIndex = keys.indexOfFirst { it.code == MyKeyboard.KEYCODE_SPACE }
+            if (spaceKeyIndex != -1) {
+                val spaceKey = keys[spaceKeyIndex]
+                if (config.keyboardLanguage == LANGUAGE_ARABIC) {
+                    spaceKey.label = ""
+                } else {
+                    spaceKey.label = spaceKey.label.ifEmpty {
+                        if (config.selectedLanguages.size > 1) getKeyboardLanguageText(config.keyboardLanguage) else ""
+                    }
+                }
+            }
+
+            if (keyboardMode != KEYBOARD_LETTERS) {
+                val modeChangeIndex = keys.indexOfFirst { it.code == MyKeyboard.KEYCODE_MODE_CHANGE }
+                if (modeChangeIndex != -1) {
+                    val modeKey = keys[modeChangeIndex]
+                    modeKey.label = if (config.keyboardLanguage == LANGUAGE_ARABIC) "أ ب ج" else "ABC"
+                }
+
+                for (key in keys) {
+                    if (key.label == "،" && config.keyboardLanguage != LANGUAGE_ARABIC) {
+                        key.label = ","
+                    } else if (key.label == "," && config.keyboardLanguage == LANGUAGE_ARABIC) {
+                        key.label = "،"
+                    }
+                    if (key.label == "؟" && config.keyboardLanguage != LANGUAGE_ARABIC) {
+                        key.label = "?"
+                    } else if (key.label == "?" && config.keyboardLanguage == LANGUAGE_ARABIC) {
+                        key.label = "؟"
+                    }
+                }
+                return keyboard
+            }
+            val emojiKeyIndex = keys.indexOfFirst { it.code == MyKeyboard.KEYCODE_EMOJI_OR_LANGUAGE }
+            if (emojiKeyIndex != -1) {
+                val emojiKey = keys[emojiKeyIndex]
+                emojiKey.icon = null
+                emojiKey.secondaryIcon = null
+                if (emojiKey.label.isEmpty()) {
+                    emojiKey.label = if (config.keyboardLanguage == LANGUAGE_ARABIC) "AR" else "EN"
+                }
+            }
+        }
+        return keyboard
+    }
+}

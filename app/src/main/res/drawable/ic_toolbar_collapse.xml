@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Windows XP Close Button Outer 3D Shadow -->
+    <path
+        android:fillColor="#7A1214"
+        android:pathData="M5,2 h14 c1.66,0 3,1.34 3,3 v14 c0,1.66 -1.34,3 -3,3 H5 c-1.66,0 -3,-1.34 -3,-3 V5 c0,-1.66 1.34,-3 3,-3 z" />
+    <!-- Windows XP Main Red Body -->
+    <path
+        android:fillColor="#D8383B"
+        android:pathData="M5,2.5 h14 c1.38,0 2.5,1.12 2.5,2.5 v13 c0,1.38 -1.12,2.5 -2.5,2.5 H5 c-1.38,0 -2.5,-1.12 -2.5,-2.5 V5 c0,-1.38 1.12,-2.5 2.5,-2.5 z" />
+    <!-- Windows XP Top Specular Highlight -->
+    <path
+        android:fillColor="#F87173"
+        android:pathData="M5,3.2 h14 c0.99,0 1.8,0.81 1.8,1.8 v2.5 c0,0.55 -0.45,1 -1,1 H4.2 c-0.55,0 -1,-0.45 -1,-1 V5 c0,-0.99 0.81,-1.8 1.8,-1.8 z" />
+    <!-- Windows XP Crisp White 'X' -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7.8,7.8 L16.2,16.2 M16.2,7.8 L7.8,16.2" />
+</vector>
